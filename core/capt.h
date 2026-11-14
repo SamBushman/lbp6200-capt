@@ -89,7 +89,7 @@ size_t capt_build_compound(uint8_t *out, size_t cap, const struct capt_page_opts
 struct capt_job {
 	struct capt_io *io;
 	unsigned reserve_id;
-	unsigned need_init, first_serial;
+	unsigned need_init, first_serial, pages_sent;
 	unsigned page_serial;            /* E0A7 payload: printer's running page number (HW-verified via Canon job1=1, job2=2) */
 	uint8_t when[8];                 /* date/time stamp (u16 year, mon, day, hour, min, sec, ?) from caller */
 	char name[24];

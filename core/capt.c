@@ -254,9 +254,10 @@ int capt_page_end(struct capt_job *j)
 	size_t n = capt_pkt(pk, sizeof pk, IC_BLACK_END, NULL, 0);
 	if (j->io->write(j->io->ctx, pk, n) < 0) return CAPT_EIO;
 	{ uint8_t sp[2]; sp[0] = j->opts.duplex != CAPT_SIMPLEX ? 4 : (uint8_t)j->page_serial; sp[1] = 0; XA(j->io, PCR_START_PRINT, sp, 2); j->page_serial++; }   /* duplex = 4 (mock capture, unconfirmed on HW) */
-	n = capt_build_job_info(jp, 1, 2, j->when, j->name, j->reserve_id);
+	j->pages_sent++;   /* E1A1 byte[4] = page index within the job (Canon: 'SetJobInfo %d page %d') */
+	n = capt_build_job_info(jp, j->pages_sent, 2, j->when, j->name, j->reserve_id);
 	XA(j->io, PCR_SET_JOB_INFO, jp + 4, n - 4);
-	n = capt_build_job_info(jp, 1, 6, j->when, j->name, j->reserve_id);
+	n = capt_build_job_info(jp, j->pages_sent, 6, j->when, j->name, j->reserve_id);
 	XA(j->io, PCR_SET_JOB_INFO, jp + 4, n - 4);
 	return 0;
 }
