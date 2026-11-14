@@ -3,3 +3,4 @@ test/replay_test
 test/raster_test
 test/cupsfilter/mkras
 *.o
+status/lbp6200-status
