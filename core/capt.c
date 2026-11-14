@@ -172,7 +172,8 @@ size_t capt_build_job_info(uint8_t *out, unsigned phase, unsigned state, const u
 static int cmd_ok(struct capt_io *io, unsigned cmd, const uint8_t *pl, size_t n)
 {
 	uint8_t r[16];
-	int e = capt_xact(io, cmd, pl, n, r, sizeof r, 3000);
+	/* E0A7 is queued behind the page data in the pipe/backend, so the printer answers only after it has taken the whole page */
+	int e = capt_xact(io, cmd, pl, n, r, sizeof r, (cmd == PCR_START_PRINT ? 60000 : 5000));
 	if (e < 0) return e;
 	return (e >= 6 && capt_get16(r + 4) != 0) ? CAPT_ESTATUS : 0;
 }
