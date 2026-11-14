@@ -1,5 +1,6 @@
 #include "capt.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "../hiscoa/hiscoa-compress.h"
 
@@ -279,6 +280,7 @@ int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt
 		if (e) break;
 		k = hiscoa_compress_band(out, cap, buf + ls * PRE, (unsigned)ls, nl, HISCOA_EOB_NORMAL, &hp);
 		if (!k) { e = CAPT_EPROTO; break; }
+		if (getenv("CAPT_DEBUG")) fprintf(stderr, "DEBUG: band y=%u nl=%u bytes=%zu\n", y, nl, k);
 		memcpy(stage + stage_n, out, k); stage_n += k;
 		while (stage_n >= 0xff00) {
 			size_t take = 0xff00;
