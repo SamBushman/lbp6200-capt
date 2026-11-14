@@ -155,12 +155,13 @@ size_t capt_build_compound(uint8_t *out, size_t cap, const struct capt_page_opts
 	return capt_pkt(out, cap, IC_COMPOUND_DATA, in, n);
 }
 
-size_t capt_build_job_info(uint8_t *out, unsigned phase, unsigned state, const uint8_t when[8], const char *name)
+size_t capt_build_job_info(uint8_t *out, unsigned phase, unsigned state, const uint8_t when[8], const char *name, unsigned job_id)
 {
 	uint8_t p[114]; size_t i;
 	memset(p, 0, sizeof p);
 	p[4] = (uint8_t)phase; p[8] = 0x0e; p[10] = 6; p[12] = 0x16;
-	p[16] = (uint8_t)state; p[17] = 1; p[18] = 2; p[22] = 0x4c; p[23] = 0x30;
+	p[16] = (uint8_t)state; p[17] = 1; capt_put16(p + 18, job_id);   /* HW-verified: pkt[22] = CAPT job id from the A2A0 reply; wrong => 0x90 EC_JOBID_MISMATCH */
+	 p[22] = 0x4c; p[23] = 0x30;
 	memcpy(p + 24, when, 8);
 	for (i = 0; name && name[i] && 72 + 2 * i + 1 < sizeof p; i++) p[72 + 2 * i] = (uint8_t)name[i];
 	return capt_pkt(out, 118, PCR_SET_JOB_INFO, p, sizeof p);
@@ -176,7 +177,7 @@ static int cmd_ok(struct capt_io *io, unsigned cmd, const uint8_t *pl, size_t n)
 }
 #define XA(io, cmd, pl, n) do { int e_ = cmd_ok(io, cmd, pl, n); if (e_) return e_; } while (0)
 
-int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8], const char *name)
+int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8], const char *name, unsigned job_id)
 {
 	static const uint8_t res[8] = { 0, 0, 0x1e, 0, 0, 0, 0, 0 }, led[16] = { 0x13 }, pd[2] = { 1, 0 };
 	static const uint8_t goon[16] = { 0xee, 0xdb, 0xea, 0xad }, zp[4] = { 0 };
@@ -185,12 +186,25 @@ int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8]
 	memset(j, 0, sizeof *j);
 	j->io = io; memcpy(j->when, when, 8);
 	strncpy(j->name, name ? name : "", sizeof j->name - 1);
-	e = capt_xact(io, PC_RESERVE_UNIT, res, 8, r, sizeof r, 3000);
-	if (e < 8) return e < 0 ? e : CAPT_EPROTO;
+	/* HARDWARE (Nov 14): A2A0 is answered with status 0x0087 ("already reserved"/busy) on about every second attempt; the failed attempt
+	 * appears to clear the state, so the next one succeeds.  Canon sends A0A4 + A3AF just before each reserve.  Retry up to 3 times. */
+	{
+		int tries;
+		for (tries = 0; tries < 3; tries++) {
+			uint8_t q[24];
+			(void)capt_xact(io, PC_GET_CARTRIDGE, NULL, 0, q, sizeof q, 3000);
+			(void)capt_xact(io, PC_GET_TIME, NULL, 0, q, sizeof q, 3000);
+			e = capt_xact(io, PC_RESERVE_UNIT, res, 8, r, sizeof r, 3000);
+			if (e < 8) return e < 0 ? e : CAPT_EPROTO;
+			if (capt_get16(r + 4) == 0) break;
+			io->sleep_ms(io->ctx, 500);
+		}
+		if (tries == 3) return CAPT_ESTATUS;
+	}
 	j->reserve_id = capt_get16(r + 6);
 	XA(io, PCR_SET_LED, led, 16);
 	XA(io, PCR_SET_POWER_DOWN, pd, 2);
-	{ size_t n = capt_build_job_info(pk, 0, 1, when, j->name);
+	{ size_t n = capt_build_job_info(pk, 0, 1, when, j->name, j->reserve_id);
 	  XA(io, PCR_SET_JOB_INFO, pk + 4, n - 4); }
 	XA(io, PCR_CLEAR_MISPRINT, NULL, 0);
 	XA(io, PCR_UNKNOWN_E0A2, NULL, 0);
@@ -226,9 +240,9 @@ int capt_page_end(struct capt_job *j)
 	size_t n = capt_pkt(pk, sizeof pk, IC_BLACK_END, NULL, 0);
 	if (j->io->write(j->io->ctx, pk, n) < 0) return CAPT_EIO;
 	{ uint8_t sp[2]; sp[0] = j->opts.duplex != CAPT_SIMPLEX ? 4 : 1; sp[1] = 0; XA(j->io, PCR_START_PRINT, sp, 2); }   /* duplex = 4 (mock capture, unconfirmed on HW) */
-	n = capt_build_job_info(jp, 1, 2, j->when, j->name);
+	n = capt_build_job_info(jp, 1, 2, j->when, j->name, j->reserve_id);
 	XA(j->io, PCR_SET_JOB_INFO, jp + 4, n - 4);
-	n = capt_build_job_info(jp, 1, 6, j->when, j->name);
+	n = capt_build_job_info(jp, 1, 6, j->when, j->name, j->reserve_id);
 	XA(j->io, PCR_SET_JOB_INFO, jp + 4, n - 4);
 	return 0;
 }

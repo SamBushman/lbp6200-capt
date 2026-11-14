@@ -82,7 +82,7 @@ struct capt_geom { unsigned px_w, px_h, print_bytes_w, print_lines, y_off; };
 int capt_paper_geom(enum capt_paper p, struct capt_geom *g);
 /* builders (exposed for tests) */
 size_t capt_build_d0a0(uint8_t *out, const struct capt_page_opts *o);   /* 0x48 payload incl. hdr -> returns 72? see .c */
-size_t capt_build_job_info(uint8_t *out, unsigned phase, unsigned state, const uint8_t when[8], const char *name_ascii);
+size_t capt_build_job_info(uint8_t *out, unsigned phase, unsigned state, const uint8_t when[8], const char *name_ascii, unsigned job_id);
 size_t capt_build_compound(uint8_t *out, size_t cap, const struct capt_page_opts *o);
 
 /* ---- job engine ---- */

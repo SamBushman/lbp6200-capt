@@ -47,18 +47,19 @@ int main(int argc, char **argv)
 	if (capt_job_page(&j, &o, bands, lens, 1)) { puts("page failed"); return 1; }
 	capt_job_end(&j);
 
+	/* frames 0,1 are the A0A4/A3AF pre-queries our core sends before the reserve (Canon always does too; the capture file lists only job frames) */
 	/* compare against capture (first job = frames until E0A9) */
 	FILE *g = fopen(frames, "r"); char line[400000]; int k = 0, bad = 0;
-	while (fgets(line, sizeof line, g) && k < ntx) {
+	while (fgets(line, sizeof line, g) && k + 2 < ntx) {
 		char t[64], dir[8], cmd[8], sz[32], hx[400000];
 		if (sscanf(line, "%63s %7s %7s %31s %399999s", t, dir, cmd, sz, hx) < 5) continue;
 		static uint8_t exp[CAPT_MAX_PKT]; int en = hex(hx, exp);
 		int full = strstr(sz, "size=") && !strstr(line, "(first");
 		size_t cmpn = full ? (size_t)en : (size_t)en;       /* C0A0 line only has first 96 bytes */
-		if (strstr(line, "(first")) { if (txn[k] == cn) { if (memcmp(tx[k], cb, cn)) { printf("MISMATCH %s (full)\n", cmd); bad++; } else printf("ok       %s (FULL %zu bytes)\n", cmd, cn); } else if (memcmp(tx[k], exp, cmpn)) { printf("MISMATCH %s (prefix)\n", cmd); bad++; } else printf("ok       %s (prefix of %zu)\n", cmd, txn[k]); }
-		else if ((size_t)en != txn[k] || memcmp(tx[k], exp, en)) {
-			printf("MISMATCH %s: exp %d got %zu\n", cmd, en, txn[k]);
-			for (int i = 0; i < en && (size_t)i < txn[k]; i++) if (tx[k][i] != exp[i]) { printf("   first diff @%d exp %02x got %02x\n", i, exp[i], tx[k][i]); break; }
+		if (strstr(line, "(first")) { if (txn[k+2] == cn) { if (memcmp(tx[k+2], cb, cn)) { printf("MISMATCH %s (full)\n", cmd); bad++; } else printf("ok       %s (FULL %zu bytes)\n", cmd, cn); } else if (memcmp(tx[k+2], exp, cmpn)) { printf("MISMATCH %s (prefix)\n", cmd); bad++; } else printf("ok       %s (prefix of %zu)\n", cmd, txn[k+2]); }
+		else if ((size_t)en != txn[k+2] || memcmp(tx[k+2], exp, en)) {
+			printf("MISMATCH %s: exp %d got %zu\n", cmd, en, txn[k+2]);
+			for (int i = 0; i < en && (size_t)i < txn[k+2]; i++) if (tx[k+2][i] != exp[i]) { printf("   first diff @%d exp %02x got %02x\n", i, exp[i], tx[k+2][i]); break; }
 			bad++;
 		} else printf("ok       %s\n", cmd);
 		k++;
