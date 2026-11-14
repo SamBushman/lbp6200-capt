@@ -186,9 +186,16 @@ int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8]
 	int e;
 	memset(j, 0, sizeof *j);
 	j->io = io; memcpy(j->when, when, 8);
-	{ struct capt_status s0; unsigned m = 0;   /* next page serial = highest printer page counter + 1 */
-	  if (capt_get_status(io, &s0) == 0) { m = s0.page_decoding; if (s0.page_printing > m) m = s0.page_printing; if (s0.page_out > m) m = s0.page_out; if (s0.page_completed > m) m = s0.page_completed; }
-	  j->page_serial = m + 1; }
+	/* HW (Canon job1 vs job2 trace, capture-003): the init steps E0BA/E0A3/E0A2/E0A4/E0A5 are sent only on the first job after power-up
+	 * (S0 bit5 = 0x20 set); later jobs skip them.  E0A5 resets the page counters, so the E0A7 page serial restarts at 1 after it; otherwise
+	 * it is the highest printer page counter + 1.  Repeating E0A5 on later jobs desynchronised the serial and stalled the printer. */
+	{ struct capt_status s0; unsigned m = 0;
+	  j->need_init = 1;
+	  if (capt_get_status(io, &s0) == 0) {
+		j->need_init = (s0.st[0] & 0x20) != 0;
+		m = s0.page_decoding; if (s0.page_printing > m) m = s0.page_printing; if (s0.page_out > m) m = s0.page_out; if (s0.page_completed > m) m = s0.page_completed; }
+	  j->page_serial = j->need_init ? 1 : m + 1;
+	  j->first_serial = j->page_serial; }
 	strncpy(j->name, name ? name : "", sizeof j->name - 1);
 	/* HARDWARE (Nov 14): A2A0 is answered with status 0x0087 ("already reserved"/busy) on about every second attempt; the failed attempt
 	 * appears to clear the state, so the next one succeeds.  Canon sends A0A4 + A3AF just before each reserve.  Retry up to 3 times. */
@@ -207,13 +214,16 @@ int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8]
 	}
 	j->reserve_id = capt_get16(r + 6);
 	XA(io, PCR_SET_LED, led, 16);
-	XA(io, PCR_SET_POWER_DOWN, pd, 2);
+	if (j->need_init) XA(io, PCR_SET_POWER_DOWN, pd, 2);
+	else (void)capt_xact(io, PC_GET_TIME, NULL, 0, r, sizeof r, 3000);
 	{ size_t n = capt_build_job_info(pk, 0, 1, when, j->name, j->reserve_id);
 	  XA(io, PCR_SET_JOB_INFO, pk + 4, n - 4); }
-	XA(io, PCR_CLEAR_MISPRINT, NULL, 0);
-	XA(io, PCR_UNKNOWN_E0A2, NULL, 0);
-	XA(io, PCR_DISCARD_DATA, NULL, 0);
-	XA(io, PCR_GO_ONLINE, goon, 16);
+	if (j->need_init) {
+		XA(io, PCR_CLEAR_MISPRINT, NULL, 0);
+		XA(io, PCR_UNKNOWN_E0A2, NULL, 0);
+		XA(io, PCR_DISCARD_DATA, NULL, 0);
+		XA(io, PCR_GO_ONLINE, goon, 16);
+	}
 	XA(io, PCR_SET_PRINTED_PAGES, zp, 4);
 	return 0;
 }
@@ -314,7 +324,7 @@ int capt_job_wait_page(struct capt_job *j, unsigned pageno, unsigned timeout_ms,
 		int e = capt_get_status(j->io, &s);
 		if (e) return e;
 		if (cb) cb(cbctx, &s);
-		if (s.page_out >= pageno || s.page_completed >= pageno) return 0;
+		{ unsigned want = j->first_serial + pageno - 1; if (s.page_out >= want || s.page_completed >= want) return 0; }
 		if (j->io->sleep_ms) j->io->sleep_ms(j->io->ctx, 100);
 		waited += 100;
 	}
