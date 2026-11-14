@@ -65,11 +65,10 @@ enum capt_state capt_status_summary(const struct capt_status *s)
 {
 	/* Derived from the real capture (evidence/capture-002/a0a8-distinct.txt): STATUS2 bit7 is "not error" and stays set;
 	 * STATUS1 = 0001 idle, 0081 receiving, 0085 printing, 4085/4001 ejecting; STATUS0 bits5-4 clear after E0A5.
-	 * Paper-out is only inferred (STATUS0 bit1 while idle and initialised): not yet confirmed on hardware. */
+	 * Paper-out bit not identified: STATUS0 bit1 was DISPROVED (S0=8c13 both with tray empty and loaded). */
 	if (!(s->st[2] & 0x0080)) return CAPT_ST_ERROR;
 	/* STATUS0 bits 5-4 stay set while the printer is idle between jobs (8c10/8c13 observed), so they are NOT an error/busy indication */
 	if (s->st[1] & 0x40C4) return (s->st[1] & 0x0080) && !(s->st[1] & 0x0004) ? CAPT_ST_BUSY : CAPT_ST_PRINTING;
-	if (s->st[0] & 0x0002) return CAPT_ST_NO_PAPER;
 	return CAPT_ST_READY;
 }
 const char *capt_state_name(enum capt_state s)
