@@ -1,0 +1,5 @@
+cups/rastertocapt6200
+test/replay_test
+test/raster_test
+test/cupsfilter/mkras
+*.o
