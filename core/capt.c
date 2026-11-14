@@ -186,6 +186,9 @@ int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8]
 	int e;
 	memset(j, 0, sizeof *j);
 	j->io = io; memcpy(j->when, when, 8);
+	{ struct capt_status s0; unsigned m = 0;   /* next page serial = highest printer page counter + 1 */
+	  if (capt_get_status(io, &s0) == 0) { m = s0.page_decoding; if (s0.page_printing > m) m = s0.page_printing; if (s0.page_out > m) m = s0.page_out; if (s0.page_completed > m) m = s0.page_completed; }
+	  j->page_serial = m + 1; }
 	strncpy(j->name, name ? name : "", sizeof j->name - 1);
 	/* HARDWARE (Nov 14): A2A0 is answered with status 0x0087 ("already reserved"/busy) on about every second attempt; the failed attempt
 	 * appears to clear the state, so the next one succeeds.  Canon sends A0A4 + A3AF just before each reserve.  Retry up to 3 times. */
@@ -240,7 +243,7 @@ int capt_page_end(struct capt_job *j)
 	uint8_t pk[8], jp[118];
 	size_t n = capt_pkt(pk, sizeof pk, IC_BLACK_END, NULL, 0);
 	if (j->io->write(j->io->ctx, pk, n) < 0) return CAPT_EIO;
-	{ uint8_t sp[2]; sp[0] = j->opts.duplex != CAPT_SIMPLEX ? 4 : 1; sp[1] = 0; XA(j->io, PCR_START_PRINT, sp, 2); }   /* duplex = 4 (mock capture, unconfirmed on HW) */
+	{ uint8_t sp[2]; sp[0] = j->opts.duplex != CAPT_SIMPLEX ? 4 : (uint8_t)j->page_serial; sp[1] = 0; XA(j->io, PCR_START_PRINT, sp, 2); j->page_serial++; }   /* duplex = 4 (mock capture, unconfirmed on HW) */
 	n = capt_build_job_info(jp, 1, 2, j->when, j->name, j->reserve_id);
 	XA(j->io, PCR_SET_JOB_INFO, jp + 4, n - 4);
 	n = capt_build_job_info(jp, 1, 6, j->when, j->name, j->reserve_id);
