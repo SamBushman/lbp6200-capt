@@ -177,7 +177,7 @@ static int cmd_ok(struct capt_io *io, unsigned cmd, const uint8_t *pl, size_t n)
 }
 #define XA(io, cmd, pl, n) do { int e_ = cmd_ok(io, cmd, pl, n); if (e_) return e_; } while (0)
 
-int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8], const char *name, unsigned job_id)
+int capt_job_begin(struct capt_job *j, struct capt_io *io, const uint8_t when[8], const char *name)
 {
 	static const uint8_t res[8] = { 0, 0, 0x1e, 0, 0, 0, 0, 0 }, led[16] = { 0x13 }, pd[2] = { 1, 0 };
 	static const uint8_t goon[16] = { 0xee, 0xdb, 0xea, 0xad }, zp[4] = { 0 };
