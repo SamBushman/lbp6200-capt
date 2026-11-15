@@ -1,0 +1,7 @@
+# Canon LBP6200 / LBP6200d (USB 04a9:271b): keep CUPS' built-in "usb" backend away from this printer.
+# The printer treats every USB message (bulk write ended by a short packet) as exactly ONE CAPT command; the built-in backend
+# forwards the filter's pipe in arbitrary 8 KiB reads, which merges the end of the page data with the following commands, and the
+# printer then stops answering until it is power-cycled.  The lbp6200 backend (device lbp6200:/dev/usb/lp0) writes one frame per
+# write() and is the only supported transport.  A blacklisted device is skipped by the usb backend both when listing devices and
+# when printing (CUPS backend/usb-libusb.c: find_device()), so no usb:// queue for it can be created or used.
+0x04a9 0x271b blacklist
