@@ -10,5 +10,6 @@
 #if defined(CUPS_VERSION_MAJOR) && (CUPS_VERSION_MAJOR < 1 || (CUPS_VERSION_MAJOR == 1 && CUPS_VERSION_MINOR < 2))
 typedef cups_page_header_t cups_page_header2_t;
 #define cupsRasterReadHeader2(r, h) cupsRasterReadHeader((r), (h))
+#define cupsRasterWriteHeader2(r, h) cupsRasterWriteHeader((r), (h))
 #endif
 #endif

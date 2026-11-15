@@ -39,6 +39,7 @@ static ULONG mk_release(void *s) { mock_released++; return --mock_refs; }
 static IOReturn mk_open(void *s) { mock_open_count++; return kIOReturnSuccess; }
 static IOReturn mk_close(void *s) { mock_closed++; return kIOReturnSuccess; }
 static IOReturn mk_u8(void *s, UInt8 *v) { *v = 0; return kIOReturnSuccess; }
+static IOReturn mk_cfg(void *s, UInt8 *v) { *v = 1; return kIOReturnSuccess; }
 static IOReturn mk_proto(void *s, UInt8 *v) { *v = 2; return kIOReturnSuccess; }
 static IOReturn mk_nep(void *s, UInt8 *v) { *v = 2; return kIOReturnSuccess; }
 static IOReturn mk_pipeprops(void *s, UInt8 pipe, UInt8 *dir, UInt8 *num, UInt8 *tt, UInt16 *mps, UInt8 *iv)
@@ -76,7 +77,7 @@ static void mock_init(void)
 	memset(&mock_tab, 0, sizeof mock_tab);
 	mock_tab.QueryInterface = mk_qi; mock_tab.AddRef = mk_addref; mock_tab.Release = mk_release;
 	mock_tab.USBInterfaceOpen = mk_open; mock_tab.USBInterfaceClose = mk_close;
-	mock_tab.GetInterfaceNumber = mk_u8; mock_tab.GetAlternateSetting = mk_u8; mock_tab.GetInterfaceProtocol = mk_proto;
+	mock_tab.GetConfigurationValue = mk_cfg; mock_tab.GetInterfaceNumber = mk_u8; mock_tab.GetAlternateSetting = mk_u8; mock_tab.GetInterfaceProtocol = mk_proto;
 	mock_tab.GetNumEndpoints = mk_nep; mock_tab.GetPipeProperties = mk_pipeprops;
 	mock_tab.WritePipe = mk_write; mock_tab.ReadPipeTO = mk_readto; mock_tab.ControlRequestTO = mk_ctl;
 	memset(&M, 0, sizeof M); M.asleep = 1;
@@ -124,6 +125,26 @@ int main(int argc, char **argv)
 	{ UInt32 hr = ((qi_t)SLOT(inst, 0x04))(inst, CFUUIDGetUUIDBytes(iface), &self); CHECK(hr == S_OK && self != NULL, "QueryInterface(class-driver) = %lx", (long)hr); }
 	{ void *dummy = NULL; UInt32 hr = ((qi_t)SLOT(inst, 0x04))(inst, CFUUIDGetUUIDBytes(CFUUIDGetConstantUUIDWithBytes(NULL, 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)), &dummy); CHECK(hr != S_OK && dummy == NULL, "unknown IID must be refused"); }
 	((rel_t)SLOT(inst, 0x0c))(inst);
+	{   /* the backend's DISCOVERY path (usb backend without arguments, makequeues): Load, Init(NULL), inject the interface, GetDeviceID, Unload - and then the backend
+	     * releases the interface ITSELF.  No Open, no Close.  The plug-in must neither need Open nor release the backend's interface reference. */
+		void *dself = NULL; CFStringRef idstr = NULL; int r; char b[200] = "";
+		mock_refs = 1;                                                    /* the backend's own reference */
+		inst = CFPlugInInstanceCreate(NULL, CFArrayGetValueAtIndex(facs, 0), type);
+		((qi_t)SLOT(inst, 0x04))(inst, CFUUIDGetUUIDBytes(iface), &dself); ((rel_t)SLOT(inst, 0x0c))(inst);
+		((init_t)SLOT(dself, 0x58))(dself, NULL);
+		*(void **)((char *)(*(void ***)dself) + 0x28) = mock_obj;
+		r = ((id_t)SLOT(dself, 0x40))(dself, &idstr, 5000);
+		CHECK(r == 0 && idstr, "discovery: GetDeviceID without Open = %x", r);
+		if (idstr) { CFStringGetCString(idstr, b, sizeof b, kCFStringEncodingASCII); CHECK(!strcmp(b, "MFG:Canon;CMD:CAPT;MDL:LBP6200;CLS:PRINTER;"), "discovery: id '%s'", b); CFRelease(idstr); }
+		((rel_t)SLOT(dself, 0x0c))(dself);                                /* UsbUnloadClassDriver */
+		CHECK(mock_refs == 1, "discovery: plug-in left the backend's interface reference at %d (want 1: no double release)", mock_refs);
+		CHECK(mock_closed == 0 && mock_open_count == 0, "discovery: plug-in must not open/close the interface");
+		mock_refs--;                                                      /* the backend's own Release */
+		CHECK(mock_refs == 0, "discovery: final refs %d", mock_refs);
+		mock_refs = 1;
+		inst = CFPlugInInstanceCreate(NULL, CFArrayGetValueAtIndex(facs, 0), type);
+		{ void *dm = NULL; ((qi_t)SLOT(inst, 0x04))(inst, CFUUIDGetUUIDBytes(iface), &dm); ((rel_t)SLOT(inst, 0x0c))(inst); self = dm; }
+	}
 	((init_t)SLOT(self, 0x58))(self, NULL);                               /* backend: Init(NULL) right after loading */
 	*(void **)((char *)(*(void ***)self) + 0x28) = mock_obj;              /* backend: write the IOUSBInterfaceInterface** into the block */
 	rc = ((open_t)SLOT(self, 0x4c))(self, 0x12345678, 2); CHECK(rc == 0, "Open = %x", rc);

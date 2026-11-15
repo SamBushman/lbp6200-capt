@@ -2,7 +2,10 @@
  * usage: gen_rasters PAPER BPP PAGES DUPLEX   (PAPER a4|letter|legal|a5|b5|exec, BPP 1|8, DUPLEX 0|1(long)|2(short/tumble))
  * Page content depends only on the page number: border box, diagonal, gradient stripes and a pseudo-random "text" block, so the
  * compressor sees sparse, dense and noisy areas.  1-bit pages are K (1 = black), 8-bit pages are SW (0 = black).  Writes raster to stdout. */
-#include <cups/raster.h>
+#include "../../cups/cups_compat.h"
+#ifndef CUPS_CSPACE_SW
+#define CUPS_CSPACE_SW 18   /* Tiger's CUPS 1.1 headers have no SW; the value is just stored in the header */
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

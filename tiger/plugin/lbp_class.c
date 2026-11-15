@@ -56,55 +56,7 @@ typedef char chk_ctl[__builtin_offsetof(Block, Control) == 0x30 && __builtin_off
 struct Priv;
 typedef struct Obj { Block *blk; CFUUIDRef factoryID; UInt32 refcount; struct Priv *p; } Obj;
 
-#define RXCAP 4096
-struct Priv {
-	IOUSBInterfaceInterface182 **i182;      /* the same interface, queried for the *TO calls (ReadPipeTO needs 10.2.3+) */
-	UInt8 out, in;
-	uint8_t rx[RXCAP]; size_t rxn, rxo;       /* bytes read from the printer but not yet consumed by the engine (it reads header and payload separately) */
-	struct capt_io io; struct lbpc_drive drive; int drive_ready;
-};
-
-/* ---------- capt_io over the bulk pipes ---------- */
-static IOReturn pipe_clear(struct Priv *p, UInt8 pipe)
-{
-	IOUSBInterfaceInterface182 *i = *p->i182;
-	return i->ClearPipeStall ? i->ClearPipeStall(p->i182, pipe) : kIOReturnUnsupported;
-}
-
-static int io_write_frame(struct Priv *p, const uint8_t *b, size_t n)
-{
-	IOReturn r = (*p->i182)->WritePipe(p->i182, p->out, (void *)b, (UInt32)n);
-	if (r == kIOUSBPipeStalled) { pipe_clear(p, p->out); r = (*p->i182)->WritePipe(p->i182, p->out, (void *)b, (UInt32)n); }
-	return r == kIOReturnSuccess ? 0 : -1;
-}
-/* the printer wants one CAPT command per USB transfer; the engine hands over single frames, except a held duplex front page (several frames in one buffer) */
-static int io_write(void *c, const uint8_t *b, size_t n)
-{
-	struct Priv *p = c;
-	while (n) {
-		size_t sz = n;
-		if (n >= 4) { size_t f = capt_get16(b + 2); if (f >= 4 && f <= n) sz = f; }
-		if (io_write_frame(p, b, sz)) return -1;
-		b += sz; n -= sz;
-	}
-	return 0;
-}
-static int io_read(void *c, uint8_t *b, size_t n, int timeout_ms)
-{
-	struct Priv *p = c;
-	if (p->rxo == p->rxn) {
-		UInt32 got = RXCAP; IOReturn r;
-		p->rxo = p->rxn = 0;
-		r = (*p->i182)->ReadPipeTO(p->i182, p->in, p->rx, &got, (UInt32)timeout_ms, (UInt32)timeout_ms);
-		if (r == kIOUSBPipeStalled) { pipe_clear(p, p->in); return 0; }
-		if (r == kIOUSBTransactionTimeout || r == kIOReturnTimeout) { if (got == 0) return 0; r = kIOReturnSuccess; }
-		if (r != kIOReturnSuccess) return -1;
-		p->rxn = got;
-		if (!got) return 0;
-	}
-	{ size_t k = p->rxn - p->rxo; if (k > n) k = n; memcpy(b, p->rx + p->rxo, k); p->rxo += k; return (int)k; }
-}
-static void io_sleep(void *c, unsigned ms) { (void)c; usleep(ms * 1000u); }
+#include "lbp_usbio.h"
 static void drive_log(void *c, const char *line) { (void)c; fprintf(stderr, "%s\n", line); fflush(stderr); }
 
 /* ---------- COM-ish plumbing ---------- */
@@ -133,22 +85,46 @@ static IOReturn m_close(Obj *self);
 static void obj_free(Obj *self)
 {
 	CFUUIDRef f = self->factoryID;
-	if (self->blk && self->blk->iface) m_close(self);
-	if (self->p) { free(self->p); self->p = NULL; }
+	/* The backend owns the IOUSBInterfaceInterface it wrote into +28 and releases it itself (discovery: Load, Init, inject, GetDeviceID, Unload, then its own Release;
+	 * printing: Close() releases it).  Releasing it here was a double release (found by makequeues crashing) - only drop what WE took. */
+	if (self->p) { if (self->p->i182) (*self->p->i182)->Release(self->p->i182); free(self->p); self->p = NULL; }
 	free(self->blk); self->blk = NULL;
 	free(self);
 	if (f) { CFPlugInRemoveInstanceForFactory(f); CFRelease(f); }
 }
 
 /* ---------- control requests (class requests of the USB printer class) ---------- */
+/* The interface the backend injected, queried for the 182 table (our own reference, dropped in Close()/free).  Works before Open(): the backend's discovery path
+ * (usb backend without arguments, makequeues) only does Load, Init, inject, GetDeviceID, Unload. */
+static IOUSBInterfaceInterface182 **get182(Obj *self)
+{
+	IOUSBInterfaceInterface **ifc = self->blk->iface;
+	if (!ifc) return NULL;
+	if (!self->p) { self->p = calloc(1, sizeof *self->p); if (!self->p) return NULL; }
+	if (!self->p->i182) {
+		IOUSBInterfaceInterface182 **q = NULL;
+		if ((*ifc)->QueryInterface(ifc, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID182), (LPVOID *)&q) != S_OK) return NULL;
+		self->p->i182 = q;
+	}
+	return self->p->i182;
+}
+/* the generic driver asks the interface every time: interface number (block +20), alternate setting, configuration */
+static void refresh_ids(Obj *self, UInt8 *config)
+{
+	IOUSBInterfaceInterface **ifc = self->blk->iface; UInt8 v;
+	if (!ifc) return;
+	if ((*ifc)->GetInterfaceNumber(ifc, &v) == kIOReturnSuccess) self->blk->ifNumber = v;
+	if ((*ifc)->GetAlternateSetting(ifc, &v) == kIOReturnSuccess) self->blk->altSetting = v;
+	if (config && (*ifc)->GetConfigurationValue(ifc, &v) == kIOReturnSuccess) *config = v;
+}
 static IOReturn ctl(Obj *self, IOUSBDevRequest *req, UInt32 timeout)
 {
-	IOUSBInterfaceInterface182 **i = self->p ? self->p->i182 : NULL;
+	IOUSBInterfaceInterface182 **i = get182(self);
 	IOUSBDevRequestTO r;
 	if (!i) return kIOReturnNotOpen;
 	r.bmRequestType = req->bmRequestType; r.bRequest = req->bRequest; r.wValue = req->wValue; r.wIndex = req->wIndex; r.wLength = req->wLength;
 	r.pData = req->pData; r.wLenDone = 0;
-	r.noDataTimeout = r.completionTimeout = timeout ? timeout : 5000;
+	r.noDataTimeout = r.completionTimeout = (timeout && timeout <= 60000) ? timeout : 5000;   /* the backend passes garbage to some calls */
 	{ IOReturn k = (*i)->ControlRequestTO(i, 0, &r); req->wLenDone = r.wLenDone; return k; }
 }
 static IOReturn m_control(Obj *self, IOUSBDevRequest *req, UInt32 timeout) { return ctl(self, req, timeout); }
@@ -169,23 +145,24 @@ static IOReturn m_getstring(Obj *self, UInt8 index, UInt16 langid, UInt32 timeou
 }
 static IOReturn m_softreset(Obj *self, UInt32 timeout)
 {
-	IOUSBDevRequest r; memset(&r, 0, sizeof r);
+	IOUSBDevRequest r; memset(&r, 0, sizeof r); refresh_ids(self, NULL);
 	r.bmRequestType = USBmakebmRequestType(kUSBOut, kUSBClass, kUSBInterface); r.bRequest = 2; r.wIndex = self->blk->ifNumber;
 	return ctl(self, &r, timeout);
 }
 static IOReturn m_portstatus(Obj *self, UInt8 *status)
 {
-	IOUSBDevRequest r; memset(&r, 0, sizeof r); *status = 0;
+	IOUSBDevRequest r; memset(&r, 0, sizeof r); *status = 0; refresh_ids(self, NULL);
 	r.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBClass, kUSBInterface); r.bRequest = 1; r.wIndex = self->blk->ifNumber; r.wLength = 1; r.pData = status;
 	return ctl(self, &r, 0);
 }
 /* GET_DEVICE_ID (printer class request 0): 2-byte length (big-endian per spec; some devices send little-endian) + IEEE 1284 string; wIndex = interface<<8 | alternate */
 static IOReturn m_getdeviceid(Obj *self, CFStringRef *out, UInt32 timeout)
 {
-	UInt8 d[1024]; IOUSBDevRequest r; IOReturn k; unsigned len;
+	UInt8 d[1024]; IOUSBDevRequest r; IOReturn k; unsigned len; UInt8 cfg = 1;
 	*out = NULL;
 	memset(&r, 0, sizeof r); memset(d, 0, sizeof d);
-	r.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBClass, kUSBInterface); r.bRequest = 0;
+	refresh_ids(self, &cfg);
+	r.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBClass, kUSBInterface); r.bRequest = 0; r.wValue = (UInt16)(cfg ? cfg - 1 : 0);
 	r.wIndex = (UInt16)((self->blk->ifNumber << 8) | self->blk->altSetting); r.wLength = sizeof d - 1; r.pData = d;
 	if ((k = ctl(self, &r, timeout)) != kIOReturnSuccess) return k;
 	if (r.wLenDone < 2) return kIOReturnUnderrun;
@@ -227,11 +204,7 @@ static IOReturn m_open(Obj *self, UInt32 locationID, UInt32 protocol)
 	p = self->p;
 	if (!b->iface && (k = find_interface(self, locationID)) != kIOReturnSuccess) return k;
 	ifc = b->iface;
-	if (!p->i182) {
-		IOUSBInterfaceInterface182 **q = NULL;
-		if ((*ifc)->QueryInterface(ifc, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID182), (LPVOID *)&q) != S_OK || !q) return kIOReturnUnsupported;
-		p->i182 = q;
-	}
+	if (!get182(self)) return kIOReturnUnsupported;
 	if ((k = (*ifc)->USBInterfaceOpen(ifc)) != kIOReturnSuccess) return k;      /* kIOReturnExclusiveAccess: someone else owns it; the backend retries */
 	b->locationID = locationID;
 	(*ifc)->GetInterfaceNumber(ifc, &b->ifNumber);
