@@ -156,4 +156,17 @@ int capt_page_end(struct capt_job *j);
 typedef int (*capt_line_fn)(void *ctx, uint8_t *dst, unsigned y);
 #define CAPT_BAND_LINES 256
 int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt_line_fn fetch, void *ctx);
+
+/* The page compressor on its own: fetch lines -> 256-line Hi-SCoA bands -> one continuous stream cut into chunks of 0xff00 bytes
+ * (last chunk shorter), delivered in order to a sink.  The chunk boundaries are part of the wire format (each chunk becomes one
+ * C0A0 frame), so every sink must pass them on unchanged.  Order of calls: begin, data..., end.  begin/end may be NULL; a non-zero
+ * return from any callback stops the page and is returned.  The Linux filter's sink drives capt_page_begin/data/end of a job; the
+ * Tiger filter's sink writes PAGE_BEGIN/PAGE_DATA/PAGE_END records that the class-driver plug-in replays into the same functions. */
+struct capt_page_sink {
+	int (*begin)(void *ctx);
+	int (*data)(void *ctx, const uint8_t *d, size_t n);
+	int (*end)(void *ctx);
+	void *ctx;
+};
+int capt_compress_page(const struct capt_page_opts *o, capt_line_fn fetch, void *fctx, const struct capt_page_sink *sink);
 #endif

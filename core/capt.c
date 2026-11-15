@@ -478,7 +478,7 @@ int capt_job_page(struct capt_job *j, const struct capt_page_opts *o,
 	return e ? e : capt_page_end(j);
 }
 
-int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt_line_fn fetch, void *ctx)
+int capt_compress_page(const struct capt_page_opts *o, capt_line_fn fetch, void *ctx, const struct capt_page_sink *sink)
 {
 	enum { PRE = 16 };
 	struct capt_geom g;
@@ -494,7 +494,7 @@ int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt
 	out = (uint8_t *)malloc(cap);
 	stage = (uint8_t *)malloc(0xff00 + cap);
 	if (!buf || !out || !stage) { free(buf); free(out); free(stage); return CAPT_EIO; }
-	e = capt_page_begin(j, o);
+	e = sink->begin ? sink->begin(sink->ctx) : 0;
 	while (!e && y < g.print_lines) {
 		unsigned nl = g.print_lines - y < CAPT_BAND_LINES ? g.print_lines - y : CAPT_BAND_LINES, i;
 		size_t k;
@@ -506,9 +506,11 @@ int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt
 		memcpy(stage + stage_n, out, k); stage_n += k;
 		while (stage_n >= 0xff00) {
 			size_t take = 0xff00;
-			e = capt_page_data(j, stage, take);
+			e = sink->data(sink->ctx, stage, take);
+			if (e) break;          /* stop at the first failure: the old loop kept going and a later success could overwrite this error */
 			memmove(stage, stage + take, stage_n - take); stage_n -= take;
 		}
+		if (e) break;
 		y += nl;
 	}
 	if (!e) {
@@ -518,10 +520,23 @@ int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt
 		if (k != 4) e = CAPT_EPROTO;
 		else { memcpy(stage + stage_n, out, k); stage_n += k; }
 	}
-	if (!e && stage_n) e = capt_page_data(j, stage, stage_n);
-	if (!e) e = capt_page_end(j);
+	if (!e && stage_n) e = sink->data(sink->ctx, stage, stage_n);
+	if (!e && sink->end) e = sink->end(sink->ctx);
 	free(buf); free(out); free(stage);
 	return e;
+}
+
+/* sink that feeds the compressed page stream into this job's engine (Linux: the filter runs the CAPT conversation itself) */
+struct job_sink { struct capt_job *j; const struct capt_page_opts *o; };
+static int js_begin(void *c) { struct job_sink *s = (struct job_sink *)c; return capt_page_begin(s->j, s->o); }
+static int js_data(void *c, const uint8_t *d, size_t n) { return capt_page_data(((struct job_sink *)c)->j, d, n); }
+static int js_end(void *c) { return capt_page_end(((struct job_sink *)c)->j); }
+
+int capt_job_page_lines(struct capt_job *j, const struct capt_page_opts *o, capt_line_fn fetch, void *ctx)
+{
+	struct job_sink js = { j, o };
+	struct capt_page_sink k = { js_begin, js_data, js_end, &js };
+	return capt_compress_page(o, fetch, ctx, &k);
 }
 
 int capt_job_flush(struct capt_job *j)
