@@ -195,3 +195,21 @@ usb backend runs as, the printer's real USB 1284 ID (for `*1284DeviceID`), real-
 | ReadPipeTO with the real printer | Cannot be settled without the device; staged test in step 4. |
 
 Install paths (step 3, after approval): kext -> `/System/Library/Extensions/LBP6200 USB Printing.kext`; plug-in -> `/Library/Printers/lbp6200/LBP6200 USB ClassDriver.plugin`; filter -> `/Library/Printers/lbp6200/Filter/rastertolbpc`; PPD -> `/Library/Printers/PPDs/Contents/Resources/en.lproj/Canon LBP6200.gz`.
+
+## 12. Steps 3-4 result: real printer on the G5 (Nov 14-15 2026)
+
+Setup: codeless merge-nub kext loaded with `kextload` (not persisted), plug-in + filter + PPD installed under /Library/Printers, CUPS queue `LBP6200` on `usb://Canon/LBP6200?serial=...`.  All real-printer tests on **Letter**; no A4 paper in stock (an early series of A4 duplex jobs was a wrong assumption of mine, printed on Letter paper, and is not a driver finding).
+
+Verified on the real printer through the full Tiger chain (cupsd -> nstexttopdf/cgpdftoraster -> rastertolbpc -> usb backend -> plug-in):
+* single page; 2-page and 3-page long-edge duplex (an odd job is padded to an even page count by Apple's cgpdftoraster, so the last sheet has a blank back); two jobs back to back;
+* cancel of a running 4-sheet job: the job ends, no filter/backend left, printer works for the next job without a power cycle (the sheet that was mid-feed at the cancel comes out blank);
+* short-edge duplex was not tested (not tested on Linux either).
+
+What the real printer taught us (none of it visible with the mock printer):
+* **makequeues crash**: the discovery path (usb backend without arguments) does Load, Init, inject interface, GetDeviceID, Unload and releases the interface itself.  The plug-in must not release it again and must not need Open for GetDeviceID.  Now covered by a discovery test in the harness.
+* **ReadPipeTO on timeout** leaves `*size` unchanged (a 4096 stale value was taken for data) -> a timeout returns 0 and the IN pipe is cleared (`ClearPipeStall`).  Timeouts are coarse (1-2 s) and can swallow the start of the next reply, so the engine reads only right after a command.
+* **Stale replies** from a job that was killed with `kill -9` made the next job's first status query fail (-3, queue disabled).  `capt_xact` now drains the pipe and repeats a *query* command once (A0A8/A0A4/A3AF); commands that change state are never repeated.  Unit test `test/lbpc/xact_stale.c`.
+* **Cancel**: CUPS sends SIGTERM; the Apple usb backend does not call `Abort()` for it, and the engine may be blocked in the page gate waiting for the printer.  The plug-in installs a SIGTERM handler while a job is open (sets the engine's cancel flag, chains to the previous handler, removed in Close()).
+* A failed job makes the usb backend exit non-zero and CUPS disables the queue (`enable LBP6200` at /usr/bin/enable on Tiger).
+
+Diagnostics: building the plug-in with `-DLBP_TRACE='"/path/file"'` writes every printer status change and every USB write (command, length, D0A9 type) to that file.  Off in the normal build.
