@@ -38,6 +38,14 @@ int main(int argc, char **argv)
 	printf("Pages     : decoding=%u printing=%u out=%u received=%u  (job %u, in-job %u, printed %u)\n",
 	       s.page_decoding, s.page_printing, s.page_out, s.page_received, s.job_no, s.pages_in_job, s.pages_printed);
 	n = capt_get_cartridges(&io, cr, 16);
+	{	/* decoded conditions (docs/07): the same ones the CUPS filter reports as printer-state-reasons */
+		unsigned c = capt_status_conditions(&s) | (n > 0 ? capt_cartridge_conditions(cr, n) : 0);
+		printf("Problems  :%s%s%s%s%s%s%s%s\n", c ? "" : " none",
+		       c & CAPT_C_NO_PAPER ? " no-paper(media-empty-error)" : "", c & CAPT_C_JAM ? " paper-jam(media-jam-error)" : "",
+		       c & CAPT_C_DOOR_OPEN ? " cover-open(door-open-error)" : "", c & CAPT_C_SERVICE ? " service-call(other-error)" : "",
+		       c & CAPT_C_NO_CARTRIDGE ? " no-toner-cartridge(toner-empty-error)" : "", c & CAPT_C_TONER_LOW ? " toner-low(toner-low-warning)" : "",
+		       c & CAPT_C_TONER_MEM ? " toner-memory(other-warning)" : "");
+	}
 	for (i = 0; i < n; i++) printf("Cartridge : #%d id=%02x flag=%02x flag2=%02x raw=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n", i, cr[i].id, cr[i].flag, cr[i].flag2,
 		cr[i].raw[0], cr[i].raw[1], cr[i].raw[2], cr[i].raw[3], cr[i].raw[4], cr[i].raw[5], cr[i].raw[6], cr[i].raw[7], cr[i].raw[8], cr[i].raw[9], cr[i].raw[10], cr[i].raw[11]);
 	if (raw) { n = capt_xact(&io, PC_GET_EXT_STATUS2, NULL, 0, r, sizeof r, 2000); for (i = 0; i < n; i++) printf("%02x%s", r[i], (i % 16 == 15) ? "\n" : " "); putchar('\n'); }

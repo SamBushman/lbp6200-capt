@@ -7,15 +7,18 @@
 
 static uint8_t last[CAPT_MAX_PKT]; static size_t lastn;
 static uint8_t tx[64][CAPT_MAX_PKT]; static size_t txn[64]; static int ntx;
-static uint8_t rep[16]; static size_t repn, repoff;
+static uint8_t rep[96]; static unsigned dec, asleep = 1; static size_t repn, repoff;
 
 static int m_write(void *c, const uint8_t *b, size_t n)
 {
 	(void)c; memcpy(tx[ntx], b, n); txn[ntx++] = n;
 	unsigned cmd = capt_get16(b);
 	repoff = 0;
+	if (cmd == 0xE0BA) asleep = 0;       /* wake */
+	if (cmd == 0xC0A4) dec++;          /* mock: a page is 'decoded' once its end marker arrives */
 	if (cmd == PC_RESERVE_UNIT) { const uint8_t r[8] = { 0xa0,0xa2,8,0,0,0,2,0 }; memcpy(rep, r, 8); repn = 8; }
 	else if (cmd >= 0xE000 && cmd < 0xF000 ) { capt_put16(rep, cmd); capt_put16(rep + 2, 6); capt_put16(rep + 4, 0); repn = 6; }
+	else if (cmd == PC_GET_EXT_STATUS2) { memset(rep, 0, 96); capt_put16(rep, cmd); capt_put16(rep + 2, 0x5c); capt_put16(rep + 4, asleep ? 0x8c12 : 0x8c10); capt_put16(rep + 4 + 12, asleep ? 0x8000 : 0); capt_put16(rep + 4 + 8, 1); capt_put16(rep + 4 + 10, 0x0080); capt_put16(rep + 4 + 14, dec); repn = 0x5c; }   /* offline (bit4), not reset, bits 0/1 clear */
 	else repn = 0;                      /* D0xx / C0xx: no reply */
 	return 0;
 }
@@ -42,24 +45,27 @@ int main(int argc, char **argv)
 	printf("band payload %zu bytes\n", bl);
 	static const uint8_t when[8] = { 0xea,0x07,0x0b,0x0d,0x17,0x06,0x2e,0x03 };
 	capt_page_opts_default(&o);
-	if (capt_job_begin(&j, &io, when, "bazzitesamtestpage.ps")) { puts("begin failed"); return 1; }
+	memset(&j, 0, sizeof j); j.tz_dst = 0x304c; j.total_pages = 1;   /* the capture's junk value; real code sends the time-zone biases */
+	if (capt_job_begin(&j, &io, when, "bazzite", "sam", "testpage.ps")) { puts("begin failed"); return 1; }
 	const uint8_t *bands[1] = { band }; size_t lens[1] = { bl };
 	if (capt_job_page(&j, &o, bands, lens, 1)) { puts("page failed"); return 1; }
 	capt_job_end(&j);
 
-	/* frames 0-2 are the A0A8/A0A4/A3AF pre-queries our core sends before the reserve (Canon always does too; the capture file lists only job frames) */
+	/* status polls (A0A8) are timing dependent in Canon too: drop them from the comparison */
+	{ int w = 0; for (int i = 0; i < ntx; i++) if (capt_get16(tx[i]) != PC_GET_EXT_STATUS2 && !(i > 3 && capt_get16(tx[i]) == PC_GET_TIME)) { if (w != i) { memcpy(tx[w], tx[i], txn[i]); txn[w] = txn[i]; } w++; } ntx = w; }
+	/* frames 0-1 are the A0A4/A3AF pre-queries our core sends before the reserve (Canon always does too; the capture file lists only job frames) */
 	/* compare against capture (first job = frames until E0A9) */
 	FILE *g = fopen(frames, "r"); char line[400000]; int k = 0, bad = 0;
-	while (fgets(line, sizeof line, g) && k + 3 < ntx) {
+	while (fgets(line, sizeof line, g) && k + 2 < ntx) {
 		char t[64], dir[8], cmd[8], sz[32], hx[400000];
 		if (sscanf(line, "%63s %7s %7s %31s %399999s", t, dir, cmd, sz, hx) < 5) continue;
 		static uint8_t exp[CAPT_MAX_PKT]; int en = hex(hx, exp);
 		int full = strstr(sz, "size=") && !strstr(line, "(first");
 		size_t cmpn = full ? (size_t)en : (size_t)en;       /* C0A0 line only has first 96 bytes */
-		if (strstr(line, "(first")) { if (txn[k+3] == cn) { if (memcmp(tx[k+3], cb, cn)) { printf("MISMATCH %s (full)\n", cmd); bad++; } else printf("ok       %s (FULL %zu bytes)\n", cmd, cn); } else if (memcmp(tx[k+3], exp, cmpn)) { printf("MISMATCH %s (prefix)\n", cmd); bad++; } else printf("ok       %s (prefix of %zu)\n", cmd, txn[k+3]); }
-		else if ((size_t)en != txn[k+3] || memcmp(tx[k+3], exp, en)) {
-			printf("MISMATCH %s: exp %d got %zu\n", cmd, en, txn[k+3]);
-			for (int i = 0; i < en && (size_t)i < txn[k+3]; i++) if (tx[k+3][i] != exp[i]) { printf("   first diff @%d exp %02x got %02x\n", i, exp[i], tx[k+3][i]); break; }
+		if (strstr(line, "(first")) { if (txn[k+2] == cn) { if (memcmp(tx[k+2], cb, cn)) { printf("MISMATCH %s (full)\n", cmd); bad++; } else printf("ok       %s (FULL %zu bytes)\n", cmd, cn); } else if (memcmp(tx[k+2], exp, cmpn)) { printf("MISMATCH %s (prefix)\n", cmd); bad++; } else printf("ok       %s (prefix of %zu)\n", cmd, txn[k+2]); }
+		else if ((size_t)en != txn[k+2] || memcmp(tx[k+2], exp, en)) {
+			printf("MISMATCH %s: exp %d got %zu\n", cmd, en, txn[k+2]);
+			for (int i = 0; i < en && (size_t)i < txn[k+2]; i++) if (tx[k+2][i] != exp[i]) { printf("   first diff @%d exp %02x got %02x\n", i, exp[i], tx[k+2][i]); break; }
 			bad++;
 		} else printf("ok       %s\n", cmd);
 		k++;

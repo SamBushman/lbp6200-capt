@@ -14,7 +14,7 @@ int main(int argc, char **argv)
 		strcpy(h.MediaClass, "PwgRaster"); h.HWResolution[0] = h.HWResolution[1] = 600;
 		h.PageSize[0] = 595; h.PageSize[1] = 842; h.ImagingBoundingBox[2] = 595; h.ImagingBoundingBox[3] = 842;
 		h.cupsWidth = W; h.cupsHeight = H; h.cupsBitsPerColor = 1; h.cupsBitsPerPixel = 1; h.cupsBytesPerLine = bpl;
-		h.cupsColorOrder = CUPS_ORDER_CHUNKED; h.cupsColorSpace = CUPS_CSPACE_K; h.NumCopies = 1;
+		h.cupsColorOrder = CUPS_ORDER_CHUNKED; h.cupsColorSpace = CUPS_CSPACE_K; h.NumCopies = 1; h.Duplex = argc > 2 ? atoi(argv[2]) : 0;
 		cupsRasterWriteHeader2(r, &h);
 		for (y = 0; y < H; y++) {
 			memset(line, 0, bpl);

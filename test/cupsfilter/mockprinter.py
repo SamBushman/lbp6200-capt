@@ -11,6 +11,7 @@ buf=b'';log=[];data=b'';starts=0;pages_data=[]
 def status():
     s=bytearray(92);struct.pack_into('<HH',s,0,0xa0a8,0x5c)
     struct.pack_into('<H',s,4,0x0000);                       # STATUS0 ready
+    struct.pack_into('<H',s,4+10,0x0080)                     # payload+10 bit7 = paper present in slot 0 (real captures: always 0x0080 with paper loaded)
     struct.pack_into('<HHH',s,4+14,starts,starts,starts);struct.pack_into('<H',s,4+20,starts)
     return bytes(s)
 def reply(c,pl=b''):

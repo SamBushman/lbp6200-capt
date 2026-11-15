@@ -1,6 +1,14 @@
-cups/rastertocapt6200
-test/replay_test
-test/raster_test
-test/cupsfilter/mkras
+# build outputs
+/cups/rastertocapt6200
+/cups/backend-lbp6200
+/status/lbp6200-status
+/test/replay_test
+/test/status_test
+/test/raster_test
+/test/cupsfilter/mkras
+/test/duplex/dec2pbm
 *.o
-status/lbp6200-status
+*.so
+__pycache__/
+# local test output
+/test/cupsfilter/1
