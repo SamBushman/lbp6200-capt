@@ -108,6 +108,18 @@ def cmd_run(a):
         idx[n] = r['digest']
     json.dump(idx, open(os.path.join(a.out, 'INDEX.json'), 'w'), indent=1)
 
+def cmd_streams(a):
+    """write the LBPC record stream of every scenario (what rastertolbpc emits, clock pinned like the golden run) to OUT/<name>.lbpc"""
+    os.makedirs(a.out, exist_ok=True)
+    env = dict(os.environ, TZ='PST8PDT', LD_PRELOAD=os.path.join(HERE, 'fakeclock.so'), LANG='C')
+    for n in (a.only or list(SCEN)):
+        paper, bpp, pages, duplex, opts = SCEN[n]
+        gen = subprocess.Popen([os.path.join(HERE, 'gen_rasters'), paper, str(bpp), str(pages), str(duplex)], stdout=subprocess.PIPE)
+        with open(os.path.join(a.out, n + '.lbpc'), 'wb') as f:
+            subprocess.check_call([a.filter_bin, '1', 'u', 't', '1', opts], stdin=gen.stdout, stdout=f, env=env)
+        gen.wait()
+    print('wrote', len(a.only or SCEN), 'streams to', a.out)
+
 def cmd_compare(a):
     g, n = a.golden, a.new; bad = 0
     for f in sorted(os.listdir(g)):
@@ -124,8 +136,10 @@ def cmd_compare(a):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest='c', required=True)
     r = sp.add_parser('run'); r.add_argument('--bin', required=True); r.add_argument('--out', required=True); r.add_argument('--only', nargs='*'); r.add_argument('--emu', help='run the filter under this emulator, e.g. qemu-ppc'); r.add_argument('--filter-bin', help='filter binary (default BIN/rastertocapt6200)'); r.add_argument('--feed', help='Tiger pipeline: path of lbpc_feed; --filter-bin is then the LBPC filter (rastertolbpc)')
+    t = sp.add_parser('streams'); t.add_argument('--filter-bin', required=True); t.add_argument('--out', required=True); t.add_argument('--only', nargs='*')
     c = sp.add_parser('compare'); c.add_argument('golden'); c.add_argument('new'); sp.add_parser('list')
     a = ap.parse_args()
     if a.c == 'list': print('\n'.join('%-18s %s' % (k, v) for k, v in SCEN.items()))
     elif a.c == 'run': cmd_run(a)
+    elif a.c == 'streams': cmd_streams(a)
     else: sys.exit(cmd_compare(a))

@@ -156,3 +156,29 @@ Decisions made while building it:
 * `total_pages` is in the record but the filter sends 0 (CUPS 1.1 raster does not announce the page count), same as Linux.
 
 Not covered by emulation (step 2 on the G5): Mach-O/Apple ABI build, CoreFoundation/IOKit glue of the class-driver plug-in, real libcups raster reader.
+
+## 10. Step 2 result: class-driver plug-in on Tiger against a MOCK USB interface (no printer, no kext)
+
+Built and run on the G5 inside a private directory (`~/lbp6200-step2`), under `nice`, userspace only; nothing was installed anywhere else and no
+kext/USB device was touched.  `test/tiger/check-g5.sh` repeats the whole thing from the host in ~7 s.
+
+* `tiger/plugin/lbp_class.c` + `Info.plist` -> `LBP6200 USB ClassDriver.plugin` (Mach-O PPC bundle, Xcode gcc 4.0.1, 10.4u SDK, `-mmacosx-version-min=10.4`).
+  CFPlugIn type 06047D16-53A2-11D6-9206-003065524592, factory `USBPrinterClassFactory`, our factory UUID F6DF49CB-1DE2-4F50-879D-A498429CFAF4.
+* Object layout (compile-time asserted): outer object {block*, factoryID, refcount, private*}; 0x60-byte block with the method table and the data the backend
+  writes (+28 interface, +2c/+2d pipeRefs).  Resolved while reading Apple's generic driver:
+  * the interface UUID to QueryInterface is 03346D74-53A3-11D6-9EA1-763065524592 (IUnknown is accepted too);
+  * `+58` is the block initialiser (the backend calls it with NULL right after loading; it also clears +28), `+5c` releases the cached device ID;
+  * the backend writes the `IOUSBInterfaceInterface**` straight into block+0x28; if none is there, Open() finds the class-7/subclass-1 interface by locationID (same search as the generic driver);
+  * `Close()` closes the interface AND releases the reference the backend handed over;
+  * the backend's read thread treats "no data" (or any error) as "sleep 0.25 s, poll again" -> our `ReadPipe()` always reports 0 bytes, the replies stay inside the CAPT engine.
+* Data path: `WritePipe()` feeds the LBPC parser; the CAPT engine talks over `ReadPipeTO`/`WritePipe` of the interface (queried as IOUSBInterfaceInterface182), keeps an
+  RX buffer (the engine reads header and payload separately, a bulk-in transfer returns whole messages) and splits multi-frame writes into one USB transfer per CAPT frame.
+* `test/tiger/harness.c` does what the usb backend does (CFPlugIn load, QueryInterface, Init(NULL), poke +0x28, Open(loc, 2), 2048-byte WritePipe pieces with a concurrent
+  ReadPipe poller, Close, release) against a mock IOUSBInterfaceInterface182 backed by `test/lbpc/mockprinter.h`.
+
+Results (G5, Tiger 10.4.11): all 18 golden scenarios: every frame the plug-in put on the mock's bulk-out pipe is byte-identical to the Linux capture (compare_wire.py, sha256 per frame);
+harness self-checks pass (pipeRefs, device-ID class request incl. wIndex, no data from ReadPipe, interface open/close balanced, reference counts 0 at the end);
+failure mode (the interface starts failing mid-job) -> WritePipe error, Abort, Close, release attempted, no hang, no stray processes; G5 load stayed ~1.1 throughout.
+
+Still open before the PAUSE (step 3): activation of the codeless personality without a reboot (kextload/kextd, permissions), PPD auto-match details, what user the
+usb backend runs as, the printer's real USB 1284 ID (for `*1284DeviceID`), real-hardware behaviour of ReadPipeTO with this printer.

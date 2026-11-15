@@ -22,3 +22,5 @@ __pycache__/
 /test/lbpc/lbpc_feed
 /test/lbpc/lbpc_fuzz
 /test/lbpc/out/
+/test/tiger/out/
+/tiger/plugin/build/

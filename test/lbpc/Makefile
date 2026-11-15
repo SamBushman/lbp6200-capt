@@ -1,7 +1,7 @@
 all: lbpc_feed
 lbpc_feed: lbpc_feed.c ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c ../../lbpc/lbpc.h
 	$(CC) -std=gnu99 -Wall -Wextra -O2 -o $@ lbpc_feed.c ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c
-lbpc_fuzz: lbpc_fuzz.c ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c ../../lbpc/lbpc.h
+lbpc_fuzz: lbpc_fuzz.c mockprinter.h ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c ../../lbpc/lbpc.h
 	$(CC) -std=gnu99 -g -O1 -fsanitize=address,undefined -fno-sanitize-recover=undefined -o $@ lbpc_fuzz.c ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c
 
 # Host checks of the Tiger code path (no Mac, no CUPS scheduler): native filter -> records -> driver library over a pty mock printer, every wire frame

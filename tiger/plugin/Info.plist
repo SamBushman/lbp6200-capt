@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>LBP6200USBClassDriver</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.lbp6200capt.usbprintingclass.plugin</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>LBP6200 USB ClassDriver</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
+	<key>CFPlugInDynamicRegisterFunction</key>
+	<string></string>
+	<key>CFPlugInDynamicRegistration</key>
+	<string>NO</string>
+	<key>CFPlugInFactories</key>
+	<dict>
+		<key>F6DF49CB-1DE2-4F50-879D-A498429CFAF4</key>
+		<string>USBPrinterClassFactory</string>
+	</dict>
+	<key>CFPlugInTypes</key>
+	<dict>
+		<key>06047D16-53A2-11D6-9206-003065524592</key>
+		<array>
+			<string>F6DF49CB-1DE2-4F50-879D-A498429CFAF4</string>
+		</array>
+	</dict>
+	<key>CFPlugInUnloadFunction</key>
+	<string></string>
+</dict>
+</plist>
