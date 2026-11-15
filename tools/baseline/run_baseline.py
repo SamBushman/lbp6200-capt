@@ -26,7 +26,7 @@ SCEN['a4_1p_dens8'] = ('a4', 1, 1, 0, 'CNTonerDensity=8')
 SCEN['a4_1p_nosmooth'] = ('a4', 1, 1, 0, 'CNSuperSmooth=False')
 SCEN['a4_2p_dx_bindtop'] = ('a4', 1, 2, 1, 'BindEdge=Top')
 
-def run_one(binp, name, spec, emu=None, filter_bin=None):
+def run_one(binp, name, spec, emu=None, filter_bin=None, feed=None):
     paper, bpp, pages, duplex, opts = spec
     m, s = os.openpty(); tty.setraw(m); tty.setraw(s); dev = os.ttyname(s)
     st = dict(buf=b'', starts=0, decs=0, online=False, asleep=True, serial=2)
@@ -66,8 +66,11 @@ def run_one(binp, name, spec, emu=None, filter_bin=None):
     fenv = env
     if emu:   # emulated guest: LD_PRELOAD does not apply (static binary has fakeclock_static linked in); keep it away from qemu itself
         fenv = dict(env); fenv.pop('LD_PRELOAD')
-    be = subprocess.Popen([os.path.join(binp, 'backend-lbp6200'), '1', 'u', 't', '1', opts], stdin=fr_, env=env,
-                          preexec_fn=lambda: os.dup2(bw, 3), close_fds=False, stderr=subprocess.PIPE)
+    if feed:   # Tiger pipeline: filter -> LBPC records -> lbpc_feed (plug-in stand-in, owns the pipe to the printer and does the CAPT conversation itself)
+        be = subprocess.Popen([feed, dev], stdin=fr_, env=fenv, close_fds=False, stderr=subprocess.PIPE)
+    else:
+        be = subprocess.Popen([os.path.join(binp, 'backend-lbp6200'), '1', 'u', 't', '1', opts], stdin=fr_, env=env,
+                              preexec_fn=lambda: os.dup2(bw, 3), close_fds=False, stderr=subprocess.PIPE)
     gen = subprocess.Popen([os.path.join(HERE, 'gen_rasters'), paper, str(bpp), str(pages), str(duplex)], stdout=subprocess.PIPE)
     src = gen.stdout; conv = None
     if emu:   # the emulated filter reads the neutral raster format (no PPC libcups on the host)
@@ -78,9 +81,12 @@ def run_one(binp, name, spec, emu=None, filter_bin=None):
     src.close()
     os.close(fw); os.close(fr_); os.close(bw); os.close(br)
     t0 = time.time(); fe = fl.communicate()[1].decode(errors='replace'); rc = fl.returncode
-    try: be.wait(timeout=30)
+    try: be.wait(timeout=300 if feed else 30)
     except Exception: be.kill(); errs.append('BACKEND DID NOT EXIT')
-    be.stderr.read(); gen.wait()
+    be_err = be.stderr.read().decode(errors='replace'); gen.wait()
+    if feed:
+        fe += be_err
+        if be.returncode and not rc: rc = be.returncode
     if conv: conv.wait()
     time.sleep(0.2)
     cmds = [(c, sz, h, p) for (c, sz, h, p) in frames if c not in POLLS]
@@ -95,7 +101,7 @@ def cmd_run(a):
     names = a.only or list(SCEN)
     idx = {}
     for n in names:
-        r = run_one(a.bin, n, SCEN[n], a.emu, a.filter_bin)
+        r = run_one(a.bin, n, SCEN[n], a.emu, a.filter_bin, a.feed)
         json.dump(r, open(os.path.join(a.out, n + '.json'), 'w'), indent=0)
         seq = ' '.join('%04x' % c for c, _, _, _ in [tuple(f) for f in r['frames']][:12])
         print('%-18s rc=%d %5.1fs frames=%-4d polls=%-4d errs=%s digest=%s' % (n, r['rc'], r['secs'], r['nframes'], r['npolls'], r['errs'], r['digest'][:12]), flush=True)
@@ -117,7 +123,7 @@ def cmd_compare(a):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest='c', required=True)
-    r = sp.add_parser('run'); r.add_argument('--bin', required=True); r.add_argument('--out', required=True); r.add_argument('--only', nargs='*'); r.add_argument('--emu', help='run the filter under this emulator, e.g. qemu-ppc'); r.add_argument('--filter-bin', help='filter binary (default BIN/rastertocapt6200)')
+    r = sp.add_parser('run'); r.add_argument('--bin', required=True); r.add_argument('--out', required=True); r.add_argument('--only', nargs='*'); r.add_argument('--emu', help='run the filter under this emulator, e.g. qemu-ppc'); r.add_argument('--filter-bin', help='filter binary (default BIN/rastertocapt6200)'); r.add_argument('--feed', help='Tiger pipeline: path of lbpc_feed; --filter-bin is then the LBPC filter (rastertolbpc)')
     c = sp.add_parser('compare'); c.add_argument('golden'); c.add_argument('new'); sp.add_parser('list')
     a = ap.parse_args()
     if a.c == 'list': print('\n'.join('%-18s %s' % (k, v) for k, v in SCEN.items()))

@@ -130,3 +130,29 @@ start-print, release) runs inside the plug-in's `WritePipe`, so CUPS backpressur
   shim, `src/test/ppc/`), run under `qemu-ppc`, reproduces all 18 golden scenarios IDENTICALLY (`make -C src/test/ppc check-ppc`).
   Not covered by emulation: Mach-O/Apple ABI, CoreFoundation/IOKit glue, real libcups raster reading on Tiger.
 * Tools: `tools/baseline/{run_baseline.py,gen_rasters.c,ras2plain.c,fakeclock*.c}`, snapshot `baseline/src-linux-pre-tiger.tar.gz`.
+
+## 9. Step 1 result: LBPC records, filter front end, driver library (host only)
+
+Code (all verified without touching the G5):
+
+| Piece | Path | Role |
+|---|---|---|
+| Record format | `lbpc/lbpc.h` | JOB_BEGIN / PAGE_BEGIN / PAGE_DATA / PAGE_END / JOB_END, little-endian, versioned stream header |
+| Writer | `lbpc/lbpc_write.c` | `capt_compress_page()` sink that emits records; chunk boundaries (0xff00) are preserved because they are wire format |
+| Tiger filter | `tiger/rastertolbpc.c` | CUPS 1.1 raster in, records out; no USB, no CAPT conversation; SIGTERM = finish page, JOB_END(cancelled) |
+| Driver library | `lbpc/lbpc_drive.c` | push parser (`lbpc_drive_feed` takes any piece size, the usb backend hands over 2048 bytes) that replays records into `capt_job_*`; `lbpc_drive_end` waits for the last page and emits `PAGE:`; `lbpc_drive_cancel` only raises the engine's cancel flag |
+| Host stand-in for plug-in+backend | `test/lbpc/lbpc_feed.c` | same library behind a pty |
+
+Status lines (`STATE:`, `INFO:`, `PAGE:`, `ERROR:`) now come from the driver library through a `log` callback; the plug-in writes them to stderr, which Apple's usb backend shares with cupsd's back-channel reader.
+
+Results:
+* `make -C test/lbpc check`: filter -> records -> driver -> pty mock printer, all 18 golden scenarios have identical wire frames and identical INFO/ERROR/PAGE lines.
+* `make -C test/ppc check-ppc-lbpc`: the same with BOTH the filter and the driver library built as static big-endian PPC32 and run under qemu-ppc (filter against Tiger's CUPS 1.1.23 headers): IDENTICAL.
+* `test/lbpc/lbpc_fuzz` (ASan+UBSan, stub printer): the intact stream is accepted at feed sizes 1..65536; ~3000 mutated/truncated/garbage streams: no crash, no leak, no hang. Every stream that is not the original is rejected unless the mutation only touched opaque compressed data.
+
+Decisions made while building it:
+* A stream that ends without JOB_END aborts the job (release, E1A1 only if the link is healthy); an empty stream is not a job.
+* JOB_END(2, filter failed) maps to `capt_job_abort(CAPT_EARG)`; (4)/(5) map to `capt_job_finish(4/5)` exactly like the Linux filter.
+* `total_pages` is in the record but the filter sends 0 (CUPS 1.1 raster does not announce the page count), same as Linux.
+
+Not covered by emulation (step 2 on the G5): Mach-O/Apple ABI build, CoreFoundation/IOKit glue of the class-driver plug-in, real libcups raster reader.

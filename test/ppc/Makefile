@@ -16,3 +16,23 @@ check-ppc: $(OUT)/rastertocapt6200
 	cc -shared -fPIC -O2 -o $(TOOLS)/fakeclock.so $(TOOLS)/fakeclock.c -ldl
 	$(TOOLS)/run_baseline.py run --bin ../../cups --out $(OUT)/run --emu qemu-ppc --filter-bin $(CURDIR)/$(OUT)/rastertocapt6200 > /dev/null
 	$(TOOLS)/run_baseline.py compare ../golden $(OUT)/run
+
+# Tiger pipeline (filter -> LBPC records -> plug-in driver library), BOTH halves big-endian PPC32 under qemu-ppc: rastertolbpc (CUPS 1.1 headers + shim) writes the
+# records, lbpc_feed (the driver library behind a pty) replays them; every wire frame must equal the Linux golden capture.
+LBPC_FILTER_SRC = ../../tiger/rastertolbpc.c ../../cups/rasterpage.c ../../lbpc/lbpc_write.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c
+LBPC_FEED_SRC = ../lbpc/lbpc_feed.c ../../lbpc/lbpc_drive.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c
+$(OUT)/rastertolbpc: $(LBPC_FILTER_SRC) cupsshim.c $(TOOLS)/fakeclock_static.c ../../cups/rasterpage.h ../../cups/cups_compat.h ../../core/capt.h ../../lbpc/lbpc.h
+	mkdir -p $(OUT)
+	powerpc-linux-gnu-gcc -static -std=gnu99 -O2 -Wall -Wextra -I$(TIGER_INC) -o $@ $(LBPC_FILTER_SRC) cupsshim.c $(TOOLS)/fakeclock_static.c
+$(OUT)/lbpc_feed: $(LBPC_FEED_SRC) $(TOOLS)/fakeclock_static.c ../../lbpc/lbpc.h ../../core/capt.h
+	mkdir -p $(OUT)
+	powerpc-linux-gnu-gcc -static -std=gnu99 -O2 -Wall -Wextra -o $@ $(LBPC_FEED_SRC) $(TOOLS)/fakeclock_static.c
+$(OUT)/lbpc_feed.sh: $(OUT)/lbpc_feed
+	printf '#!/bin/sh\nexec qemu-ppc %s/%s "$$@"\n' "$(CURDIR)" "$(OUT)/lbpc_feed" > $@ && chmod +x $@
+check-ppc-lbpc: $(OUT)/rastertolbpc $(OUT)/lbpc_feed.sh
+	$(MAKE) -C ../../cups
+	cc -O2 -o $(TOOLS)/ras2plain $(TOOLS)/ras2plain.c -lcups
+	cc -O2 -o $(TOOLS)/gen_rasters $(TOOLS)/gen_rasters.c -lcups
+	cc -shared -fPIC -O2 -o $(TOOLS)/fakeclock.so $(TOOLS)/fakeclock.c -ldl
+	$(TOOLS)/run_baseline.py run --bin ../../cups --out $(OUT)/run-lbpc --emu qemu-ppc --filter-bin $(CURDIR)/$(OUT)/rastertolbpc --feed $(CURDIR)/$(OUT)/lbpc_feed.sh > /dev/null
+	$(TOOLS)/run_baseline.py compare ../golden $(OUT)/run-lbpc

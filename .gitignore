@@ -18,3 +18,7 @@ __pycache__/
 /tools/baseline/ras2plain
 /tools/baseline/*.so
 /test/ppc/out/
+/tiger/rastertolbpc
+/test/lbpc/lbpc_feed
+/test/lbpc/lbpc_fuzz
+/test/lbpc/out/
