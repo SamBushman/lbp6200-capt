@@ -30,6 +30,11 @@ static void report(void *c, const struct capt_status *s)
 		d->rep_lastc = (long)time(NULL);
 		if (n >= 0) { memcpy(j->cart, cr, sizeof cr); j->ncart = n; }
 	}
+#ifdef LBP_TRACE   /* diagnostic build only: status changes seen by the gates -> file */
+	{ static unsigned last[12]; unsigned cur[12] = { s->st[0], s->st[1], s->st[2], s->st[3], s->st[4], s->st[5], s->st[6], s->page_decoding, s->page_printing, s->page_out, s->page_completed, s->page_received };
+	  if (memcmp(last, cur, sizeof cur)) { FILE *f = fopen(LBP_TRACE, "a"); memcpy(last, cur, sizeof cur);
+	    if (f) { fprintf(f, "%ld S=%04x %04x %04x %04x %04x %04x %04x dec=%u prt=%u out=%u comp=%u rcv=%u serial=%u\n", (long)time(NULL), cur[0], cur[1], cur[2], cur[3], cur[4], cur[5], cur[6], cur[7], cur[8], cur[9], cur[10], cur[11], j->page_serial); fclose(f); } } }
+#endif
 	cond = capt_status_conditions(s) | capt_cartridge_conditions(j->cart, j->ncart);
 	st = (int)capt_status_summary(s);
 	key = (int)cond << 4 | st;

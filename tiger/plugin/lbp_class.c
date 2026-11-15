@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include "../../lbpc/lbpc.h"
 
 #define IFACE_UUID  CFUUIDGetConstantUUIDWithBytes(NULL, 0x03, 0x34, 0x6d, 0x74, 0x53, 0xa3, 0x11, 0xd6, 0x9e, 0xa1, 0x76, 0x30, 0x65, 0x52, 0x45, 0x92)
@@ -188,6 +189,24 @@ static IOReturn m_writepipe(Obj *self, UInt8 *buf, UInt32 *len, UInt32 flags)
 	if (e) { fprintf(stderr, "ERROR: LBP6200 job failed (%d)\n", e); fflush(stderr); return e == CAPT_ECANCEL ? kIOReturnAborted : kIOReturnIOError; }
 	return kIOReturnSuccess;
 }
+/* CUPS cancels a job with SIGTERM.  The Apple usb backend does not call Abort() for it and our WritePipe may be blocked waiting for the printer, so (like the Linux
+ * filter) the plug-in turns SIGTERM into the engine's cancel flag (safe point: the engine unwinds, the backend then sees the write fail and closes) and chains to
+ * whatever handler was installed before.  Installed while a job stream is open, removed in Close(). */
+static struct sigaction g_oldterm; static int g_term_set;
+static void on_term(int sig)
+{
+	if (capt_cancel_flag) *capt_cancel_flag = 1;
+	if (g_oldterm.sa_handler != SIG_DFL && g_oldterm.sa_handler != SIG_IGN && g_oldterm.sa_handler) g_oldterm.sa_handler(sig);
+}
+static void term_install(void)
+{
+	struct sigaction sa;
+	if (g_term_set) return;
+	memset(&sa, 0, sizeof sa); sa.sa_handler = on_term; sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGTERM, &sa, &g_oldterm) == 0) g_term_set = 1;
+}
+static void term_remove(void) { if (g_term_set) { sigaction(SIGTERM, &g_oldterm, NULL); g_term_set = 0; } }
+
 static IOReturn m_abort(Obj *self)
 {
 	if (self->p && self->p->drive_ready) lbpc_drive_cancel(&self->p->drive);
@@ -223,6 +242,7 @@ static IOReturn m_open(Obj *self, UInt32 locationID, UInt32 protocol)
 	p->io.ctx = p; p->io.write = io_write; p->io.read = io_read; p->io.sleep_ms = io_sleep;
 	lbpc_drive_init(&p->drive, &p->io, drive_log, NULL);
 	p->drive_ready = 1;
+	term_install();
 	return kIOReturnSuccess;
 fail:
 	(*ifc)->USBInterfaceClose(ifc);
@@ -238,6 +258,7 @@ static IOReturn m_close(Obj *self)
 		fflush(stderr);
 		p->drive_ready = 0;
 	}
+	term_remove();
 	if (b && b->iface) {
 		IOUSBInterfaceInterface **ifc = b->iface;
 		if (p && p->i182) { (*p->i182)->Release(p->i182); p->i182 = NULL; }

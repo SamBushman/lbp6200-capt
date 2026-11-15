@@ -27,6 +27,9 @@ static IOReturn pipe_clear(struct Priv *p, UInt8 pipe)
 static int io_write_frame(struct Priv *p, const uint8_t *b, size_t n)
 {
 	IOReturn r = (*p->i182)->WritePipe(p->i182, p->out, (void *)b, (UInt32)n);
+#ifdef LBP_TRACE
+	{ FILE *f = fopen(LBP_TRACE, "a"); if (f) { fprintf(f, "%ld W %02x%02x len=%lu r=%x%s\n", (long)time(NULL), n > 1 ? b[0] : 0, n > 1 ? b[1] : 0, (unsigned long)n, (unsigned)r, n >= 14 && b[0] == 0xa9 ? " D0A9 type" : ""); if (n >= 14 && b[0] == 0xa9 && b[1] == 0xd0) fprintf(f, "   D0A0[5]=%02x\n", b[13]); fclose(f); } }
+#endif
 	if (r == kIOUSBPipeStalled) { pipe_clear(p, p->out); r = (*p->i182)->WritePipe(p->i182, p->out, (void *)b, (UInt32)n); }
 	return r == kIOReturnSuccess ? 0 : -1;
 }
