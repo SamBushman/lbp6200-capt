@@ -28,7 +28,7 @@ static int read_full(struct capt_io *io, uint8_t *b, size_t n, int to)
 	return 0;
 }
 
-int capt_xact(struct capt_io *io, unsigned cmd, const uint8_t *payload, size_t n,
+static int xact_once(struct capt_io *io, unsigned cmd, const uint8_t *payload, size_t n,
               uint8_t *reply, size_t cap, int to)
 {
 	uint8_t pk[CAPT_MAX_PKT];
@@ -43,6 +43,21 @@ int capt_xact(struct capt_io *io, unsigned cmd, const uint8_t *payload, size_t n
 	if (rc != cmd || rs < 6 || rs > cap) return CAPT_EPROTO;
 	if (rs > 6 && (r = read_full(io, reply + 6, rs - 6, to)) != 0) return r;
 	return (int)rs;
+}
+
+/* Status/query commands may be repeated safely.  If their reply does not start with the command we sent, the pipe still holds replies of an earlier, killed job
+ * (seen on the real printer after a job was killed mid-run): discard what is pending and ask once more, so the next job does not fail for it. */
+static int is_query(unsigned cmd) { return cmd == PC_GET_EXT_STATUS2 || cmd == PC_GET_CARTRIDGE || cmd == 0xa3af; }
+int capt_xact(struct capt_io *io, unsigned cmd, const uint8_t *payload, size_t n,
+              uint8_t *reply, size_t cap, int to)
+{
+	int r = xact_once(io, cmd, payload, n, reply, cap, to);
+	if (r == CAPT_EPROTO && reply && is_query(cmd)) {
+		uint8_t t[512]; int i;
+		for (i = 0; i < 64 && io->read(io->ctx, t, sizeof t, 300) > 0; i++) ;
+		r = xact_once(io, cmd, payload, n, reply, cap, to);
+	}
+	return r;
 }
 
 /* ------------------------------------------------------------ status */

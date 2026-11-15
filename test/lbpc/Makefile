@@ -8,6 +8,7 @@ lbpc_fuzz: lbpc_fuzz.c mockprinter.h ../../lbpc/lbpc_drive.c ../../core/capt.c .
 # compared with the Linux golden capture; then the sanitizer mutation fuzz of the record parser.  (Big-endian PPC32: make -C ../ppc check-ppc-lbpc)
 TOOLS = ../../tools/baseline
 check: lbpc_feed lbpc_fuzz
+	cc -std=gnu99 -w -o out/xact_stale xact_stale.c ../../core/capt.c ../../hiscoa/hiscoa-compress.c ../../hiscoa/hiscoa-common.c && out/xact_stale
 	$(MAKE) -C ../../tiger
 	$(MAKE) -C ../../cups
 	cc -O2 -o $(TOOLS)/ras2plain $(TOOLS)/ras2plain.c -lcups
