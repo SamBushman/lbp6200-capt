@@ -24,3 +24,4 @@ __pycache__/
 /test/lbpc/out/
 /test/tiger/out/
 /tiger/plugin/build/
+tiger/pkg/out
