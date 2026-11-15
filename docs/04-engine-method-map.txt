@@ -1,0 +1,85 @@
+0809e4b8 common/monlog.h virtual void C_LogWriter::LoadSetting(DWORD*, DWORD*, tstring*)
+080a68ac engine.cpp     LONG C_PrinterReserve::ReleasePrinter(C_Port*)
+080a7c54 engine.cpp     LONG C_PrinterReserve::ReservePrinter(C_Port*, C_Job*, WORD)
+080ad0c0 engsub.cpp     LONG C_Port::ReadFromPort(void*, DWORD)
+080ad134 engsub.cpp     LONG C_Port::WriteData(void*, DWORD)
+080ad390 engsub.cpp     LONG C_Port::ReadResponseSub(void*, DWORD, long unsigned int*)
+080ad510 engsub.cpp     LONG C_Port::ReadResponse(void*, DWORD, long unsigned int*)
+080ad668 engsub.cpp     LONG C_Port::EngineReservePrinter(WORD, WORD, DWORD*)  cmds=0xa2a0
+080ad758 engsub.cpp     LONG C_Port::EngineReleasePrinter(WORD)  cmds=0xe0a9
+080ad810 engsub.cpp     LONG C_Port::ClearWaitCleaning()
+080ad85c engsub.cpp     LONG C_Port::EngineGetErrorHistory(void*, DWORD, long unsigned int*)
+080ad8f8 engsub.cpp     LONG C_Port::EngineGetJamHistory(void*, DWORD, long unsigned int*)
+080ad994 engsub.cpp     LONG C_Port::EngineGetPartsList(long unsigned int*, DWORD, long unsigned int*)
+080adae0 engsub.cpp     LONG C_Port::ClearCancelRequest()
+080adb2c engsub.cpp     LONG C_Port::AnnounceJob()
+080add00 engsub.cpp     LONG C_Port::DiscardData()
+080add4c engsub.cpp     LONG C_Port::ClearMisprint()
+080add98 engsub.cpp     LONG C_Port::ClearError()
+080adde4 engsub.cpp     LONG C_Port::GetDeviceId(char*, DWORD, long unsigned int*)
+080adef8 engsub.cpp     LONG C_Port::GoOffline(BOOL)  cmds=0xe0a6
+080adfd8 engsub.cpp     LONG C_Port::StartPrint(DWORD)  cmds=0xe0a7
+080ae090 engsub.cpp     LONG C_Port::Cleaning(BYTE, BYTE, BYTE)  cmds=0xe0ad
+080ae170 engsub.cpp     LONG C_Port::GoOnline(DWORD)  cmds=0xe0a5
+080ae278 engsub.cpp     LONG C_Port::SetJobInfo(DWORD, BYTE, short int, short int, JOBTIME*, WORD, BYTE, tstring&, tstring&, tstring&)  cmds=0xe1a1
+080ae790 engsub.cpp     LONG C_Port::GetJobInfo(RESGETJOBINFO2*, tstring*, tstring*, tstring*)
+080aeb64 engsub.cpp     LONG C_Port::SetLEDStatus(C_LEDSTATUS*)  cmds=0xe1a2
+080aecc0 engsub.cpp     BOOL ConvertFlash(WORD, void*, DWORD)
+080aee88 engsub.cpp     LONG C_Port::GetFlashData(WORD, void*, DWORD, WORD, WORD, long unsigned int*)  cmds=0xa3a1
+080af010 engsub.cpp     LONG C_Port::EngineGetCounter(DWORD, long unsigned int*)  cmds=0xa3a3
+080af0e8 engsub.cpp     LONG C_Port::EngineSendCommand(void*, DWORD, void*, DWORD, long unsigned int*)
+080af230 engsub.cpp     LONG C_Port::GetDebugInfo(BYTE, void*, DWORD, long unsigned int*)  cmds=0xa4a0
+080af300 engsub.cpp     LONG C_Port::SetPowerDown(BYTE, BYTE)  cmds=0xe0ba
+080af404 engsub.cpp     LONG C_Port::EngineSetTime()  cmds=0xa3a9
+080af744 engsub.cpp     LONG C_Port::EngineGetNICParameter(char*, DWORD, long unsigned int*)
+080af8f8 engsub.cpp     LONG C_Port::EngineGetConfigPage(BYTE, RESGETCONFIGPAGE*, DWORD, long unsigned int*)  cmds=0xa3a4
+080afb64 engsub.cpp     LONG C_Port::EngineGetUSBID(RESGETUSBID*, DWORD, long unsigned int*)
+080afc24 engsub.cpp     LONG C_Port::SetPrintedPages(DWORD)
+080aff04 engsub.cpp     LONG C_Port::ClearCRGError(BYTE)  cmds=0xe1a5
+080affb8 engsub.cpp     LONG C_Port::ClearCRGError2(BYTE)  cmds=0xe1b7
+080b006c engsub.cpp     LONG C_Port::GetPageStatus(PAGESTATUS*)
+080b01b8 engsub.cpp     LONG C_Port::EngineStartCalibration(BYTE, BYTE)  cmds=0xe1ab
+080b027c engsub.cpp     LONG C_Port::EngineServiceOperation(BYTE)
+080b0460 engsub.cpp     LONG C_Port::EngineGetEngineData(BYTE, void*, DWORD, long unsigned int*)
+080b05c8 engsub.cpp     LONG C_Port::EngineGetPartsCounter(DWORD, void*, DWORD, long unsigned int*)
+080b066c engsub.cpp     LONG C_Port::EngineChangeParts(DWORD)
+080b0714 engsub.cpp     LONG C_Port::ChangeCartridgeMode(DWORD)
+080b07c0 engsub.cpp     LONG C_Port::RotateCartridge(DWORD)
+080b086c engsub.cpp     LONG C_Port::GetMisprintStatus(RESGETMISPRINTSTATUS*)
+080b08bc engsub.cpp     LONG C_Port::GetJamStatus(RESGETJAMSTATUS*)
+080b090c engsub.cpp     LONG C_Port::GetServiceCallStatus(SERVICECALLSTATUS*)
+080b095c engsub.cpp     LONG C_Port::GetPrinterInfo(RESGETPRINTERINFO*)
+080b09ac engsub.cpp     LONG C_Port::GetCalibrationData(CALIBSTATUS*)
+080b09fc engsub.cpp     LONG C_Port::GetDigregData(DIGREGSTATUS*)
+080b0a4c engsub.cpp     LONG C_Port::GetIllegalConnectionStatus(RESGETILLEGALCONNECTIONSTATUS*)
+080b0a9c engsub.cpp     LONG C_Port::GetWaitingStatus(RESGETWAITINGSTATUS*)
+080b0aec engsub.cpp     LONG C_Port::GetInputStatus(INPUTSTATUSARRAY*)
+080b0b3c engsub.cpp     LONG C_Port::GetOutputStatus(OUTPUTSTATUSARRAY*)
+080b0b8c engsub.cpp     LONG C_Port::GetCartridgeStatus(CRGSTATUSARRAY*)
+080b0bdc engsub.cpp     LONG C_Port::GetExtendedStatus(RESGETEXTENDEDSTATUS2*)
+080b0c2c engsub.cpp     LONG C_Port::EngineGetTime(RESGETTIME*)
+080b0c7c engsub.cpp     LONG C_Port::EngineGetSensorValue(RESGETSENSORVALUE*)
+080c4718 print2.cpp     void C_Port::PrintJob2()
+080c4fac print2.cpp     void C_Port::PrintJob1()
+080c5e78 status.cpp     LONG C_Port::CheckOutputStatus()
+080c6040 status.cpp     LONG C_Port::CheckPaperStatus()
+080c65fc status.cpp     LONG C_Port::UpdateLED(C_Job*)
+080c772c status.cpp     LONG C_Port::UpdateStatus()
+080c79a0 status.cpp     LONG C_Port::CheckCartridgeStatus(BOOL)
+080c7dbc status.cpp     LONG C_Port::GetStatus()
+080ca610 status.cpp     LONG C_Port::CheckStatusInPage()
+080cd2cc status.cpp     LONG C_Port::CheckStatus()
+
+# (above: C++ method signatures recovered from __assert_fail strings in Canon Linux captmoncnabd
+#  = LBP6200 engine monitor; generated by tools/engsigs.py. Annotate any function with
+#  tools/annotate.py <dump.c> <addr>.)
+# Packet struct names (from auto_ptr<T> asserts): CMDRESERVEUNIT/RESRESERVEUNIT, CMDRELEASEUNIT,
+# CMDBEGINJOB, CMDPAGEINFO, CMDBEGINPAGE, CMDBEGINDATA, CMDBLACKPLANE, CMDBLACKDATA, CMDBLACKEND,
+# CMDVIDEODATA/COUNT, CMDCOMPOUNDDATA, CMDENDPAGE, CMDJENDPAGE, CMDENDJOB, COMPPARAM,
+# SETJOBINFO_CMDBUFFER, CMDSTARTPRINT, CMDGOONLINE/OFFLINE, CMDCLEANING, RESGETEXTENDEDSTATUS2, ...
+# Confirmed wire layouts so far:
+#  A2A0 RESERVE_UNIT: u16 cmd, u16 size=0x0C, u16 a, u16 b, u32 0 ; reply 8 B, u16 at +6 returned (id)
+#  E0A9 RELEASE_UNIT: u16 cmd, u16 size=0x06, u16 id
+#  Sources: engsub.cpp EngineReservePrinter@080ad668, EngineReleasePrinter@080ad758
+# Monitor launch args (from ccpd strings): --data-write-fd --data-read-fd --cmd-write-fd
+#  --cmd-read-fd --output-fd --input-fd --printer-uri=

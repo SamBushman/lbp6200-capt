@@ -1,0 +1,4 @@
+#!/bin/bash
+# usage: fn <dllname-without-.c> <addr-hex> [maxlines]  -> print one decompiled function
+f=~/lbp6200/ghidra/out/$1.c; a=$2; n=${3:-120}
+awk -v a="@ $a ====" 'index($0,a){p=1;print;next} p&&/^\/\/ ==== /{exit} p' "$f" | head -$n

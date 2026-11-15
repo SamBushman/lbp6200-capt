@@ -12,3 +12,9 @@
 __pycache__/
 # local test output
 /test/cupsfilter/1
+# tool binaries built locally
+/tools/mkras_letter
+/tools/baseline/gen_rasters
+/tools/baseline/ras2plain
+/tools/baseline/*.so
+/test/ppc/out/
