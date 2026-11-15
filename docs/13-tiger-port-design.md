@@ -213,3 +213,5 @@ What the real printer taught us (none of it visible with the mock printer):
 * A failed job makes the usb backend exit non-zero and CUPS disables the queue (`enable LBP6200` at /usr/bin/enable on Tiger).
 
 Diagnostics: building the plug-in with `-DLBP_TRACE='"/path/file"'` writes every printer status change and every USB write (command, length, D0A9 type) to that file.  Off in the normal build.
+
+Step 5 (Nov 15): packaged (tiger/pkg, docs/14).  The package was installed over the manual install and the G5 restarted: the kext personality loads at boot, a Letter page printed afterwards.

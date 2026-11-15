@@ -26,6 +26,9 @@ Tested on a Power Mac G5 / Tiger 10.4.11 with CUPS 1.1.23, Canon LBP6200 on USB.
 * Build the package yourself on a Tiger Mac with the Xcode tools: `sh tiger/pkg/build-pkg.sh`.
 * Diagnostic build: compile the plug-in with `-DLBP_TRACE='"/path/trace.log"'` to log printer status changes and every USB write.
 
+## Verified (Nov 15 2026, G5 / Tiger 10.4.11)
+* Package install over an existing manual install, then a restart: the kext personality loaded at boot by itself (`USB Printing Class` on the printer's interface), the queue survived, and a Letter page printed without any manual step.
+
 ## Not verified
-* The kext surviving a reboot (installed in /System/Library/Extensions, but the G5 has not been restarted since).
 * A clean install of the .pkg on a machine that never had the driver.
+* Switching the printer on only *after* the machine has booted (it was already on when checked).
