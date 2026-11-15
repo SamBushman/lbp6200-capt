@@ -1,6 +1,6 @@
 Name:           lbp6200-capt
 Version:        0.1
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Open-source CUPS driver for the Canon LBP6200 (CAPT 3.0)
 License:        GPL-3.0-or-later
 Source0:        lbp6200-capt-%{version}.tar.gz
@@ -43,6 +43,11 @@ install -Dm644 doc/INSTALL-bazzite.md %{buildroot}%{_docdir}/%{name}/INSTALL-baz
 %{_bindir}/lbp6200-status
 
 %changelog
+* Sat Nov 14 2026 lbp6200-capt maintainers - 0.1-3
+- Release the printer on every exit once it is reserved (Canon PrintJob2 behaviour, docs/12): failed job start / failed page -> final E1A1 (state 5, or 4 on
+  cancel; never 6) while the link answers, then E0A9.  SIGTERM (CUPS cancel) is handled by the filter and ignored by the backend until the filter is done.
+  A page whose raster input ends early is completed with white, reported as an error and ends with state 5.
+
 * Sat Nov 14 2026 lbp6200-capt maintainers - 0.1-2
 - Ship a CUPS usb-backend quirk (blacklist 04a9:271b): the built-in usb backend merges CAPT commands into one USB message and wedges the
   printer; only the lbp6200 backend may drive it.  Fixes a fresh setup picking usb://Canon/LBP6200.
